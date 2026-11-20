@@ -1459,7 +1459,7 @@ function kanonik_(val, opsi){
  *    isi API_URL dengan URL Web App /exec, lalu callApi memakai fetch.
  *  - Bila dibuka sebagai file lokal tanpa API_URL: mode demo.
  * ============================================================ */
-var API_URL = 'https://script.google.com/macros/s/AKfycbxRMUSxFBirZNSX5XXCCDEM1-T7RToxiDhhtAxHoi1XG76-yNYrzSYqDQrJ75532Z2V/exec'; // ← URL Web App /exec. WAJIB diisi untuk PWA; kosongkan hanya pada berkas demo.
+var API_URL = 'https://https://script.google.com/macros/s/AKfycbxRMUSxFBirZNSX5XXCCDEM1-T7RToxiDhhtAxHoi1XG76-yNYrzSYqDQrJ75532Z2V/exec'; // ← URL Web App /exec. WAJIB diisi untuk PWA; kosongkan hanya pada berkas demo.
 
 var ADA_GAS = (typeof google !== 'undefined' && google.script && google.script.run);
 var MODE_API = !ADA_GAS && !!API_URL;         // host statis → fetch ke GAS
@@ -12227,16 +12227,37 @@ function kartuIzinNotifikasi(aktif){
     '<div style="flex:1"><b style="font-size:12.5px">Notifikasi Layar</b>'+
     '<div style="font-size:11px;color:var(--abu);margin-top:3px;line-height:1.5">'+esc(d.pesan)+'</div></div>'+
     (d.sebab==='belum'
-      ? '<button class="btn btn-utama btn-kecil" onclick="mintaIzinNotifikasi().then(function(){bukaPanelNotifikasi();})">Izinkan</button>'
+      ? '<button class="btn btn-utama btn-kecil" onclick="mintaIzinNotifikasi().then(function(){ if(panelNotifikasiTerbuka()) gambarPanelNotifikasi(); })">Izinkan</button>'
       : '')+
     '</div>';
 }
 
+/* Daftar workflow diambil SEKALI per 5 menit untuk dihitung di lonceng.
+ *
+ * Dulu: bila daftar kosong, panel meminta ke server lalu MEMANGGIL DIRINYA
+ * SENDIRI setelah jawaban tiba. Tanpa dokumen workflow, jawaban selalu kosong,
+ * sehingga terjadi perulangan tanpa akhir: panel terus terbuka kembali setiap
+ * beberapa detik walau sudah ditutup. Kini jawaban hanya MEMPERBARUI isi panel,
+ * dan itu pun hanya bila panelnya masih terbuka. */
+var NOTIF_WF_DIAMBIL = 0;
+
+function panelNotifikasiTerbuka(){
+  var tirai = document.getElementById('tirai');
+  return !!(tirai && tirai.classList.contains('tampil') && document.getElementById('panelNotifKebun'));
+}
+
 function bukaPanelNotifikasi(){
-  // pastikan daftar workflow terbaru ikut terhitung di notifikasi
-  if(!(WF.docs||[]).length){
-    callApi('listWorkflows', {}).then(function(r){ WF.docs=r||[]; bukaPanelNotifikasi(); }).catch(function(){});
+  gambarPanelNotifikasi();
+  if(Date.now() - NOTIF_WF_DIAMBIL > 5 * 60 * 1000){
+    NOTIF_WF_DIAMBIL = Date.now();
+    callApi('listWorkflows', {}).then(function(r){
+      WF.docs = Array.isArray(r) ? r : [];
+      if(panelNotifikasiTerbuka()) gambarPanelNotifikasi();   // perbarui isi, jangan buka ulang
+    }).catch(function(){ NOTIF_WF_DIAMBIL = 0; });
   }
+}
+
+function gambarPanelNotifikasi(){
   var list = periksaDanKirimNotifikasiJadwal();
   var isNotifGranted = typeof Notification !== 'undefined' && Notification.permission === 'granted';
 
@@ -12262,7 +12283,7 @@ function bukaPanelNotifikasi(){
 
   bukaLembar(
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'+
-      '<h3 style="margin:0">🔔 Peringatan & Notifikasi Kebun</h3>'+
+      '<h3 style="margin:0" id="panelNotifKebun">🔔 Peringatan & Notifikasi Kebun</h3>'+
       '<span class="chip '+(list.length?'merah':'hijau')+'">'+list.length+' Alert</span>'+
     '</div>'+
     kartuIzinNotifikasi(isNotifGranted)+
